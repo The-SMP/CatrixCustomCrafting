@@ -9,7 +9,7 @@ commands:
     description: 自訂合成管理與配方介面
     usage: /ccraft [create|edit|list|open|reload]
     aliases: [catrixcraft]
-  version:
+  ccraftversion:
     description: 檢查 CatrixCustomCrafting 更新
     aliases: [ccversion]
 permissions:
