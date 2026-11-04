@@ -1,0 +1,36 @@
+# Maven output
+/target/
+
+# Local Paper test server and runtime files
+/test-server/
+/cache/
+/libraries/
+/logs/
+/plugins/
+/versions/
+/world/
+/world_*/
+/META-INF/
+/paper.jar
+/mojang_*.jar
+/eula.txt
+/server.properties
+/bukkit.yml
+/spigot.yml
+/commands.yml
+/help.yml
+/ops.json
+/banned-ips.json
+/banned-players.json
+/permissions.yml
+/usercache.json
+/whitelist.json
+/version_history.json
+/version.json
+/.console_history
+/console.log
+/error.log
+
+# IDE files
+/.idea/
+/*.iml

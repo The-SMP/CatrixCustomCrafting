@@ -1,0 +1,25 @@
+name: CatrixCustomCrafting
+version: 1.0.0
+main: me.cat6666.catrixcustomcrafting.CatrixCustomCrafting
+api-version: '1.21.11'
+author: me.cat6666
+description: 自訂合成配方框架
+commands:
+  ccraft:
+    description: 自訂合成管理與配方介面
+    usage: /ccraft [create|edit|list|open|reload]
+    aliases: [catrixcraft]
+  version:
+    description: 檢查 CatrixCustomCrafting 更新
+    aliases: [ccversion]
+permissions:
+  catrixcustomcrafting.admin:
+    default: op
+  catrixcustomcrafting.create:
+    default: op
+  catrixcustomcrafting.use:
+    default: true
+  catrixcustomcrafting.reload:
+    default: op
+  catrixcustomcrafting.version:
+    default: op
