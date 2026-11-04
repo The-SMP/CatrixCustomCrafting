@@ -52,7 +52,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         Bukkit.getPluginManager().registerEvents(workbench, this);
         saveTask = Bukkit.getScheduler().runTaskTimer(this, this::flushIfDirty, 20L * Math.max(30, getConfig().getInt("settings.autosave-seconds", 120)), 20L * Math.max(30, getConfig().getInt("settings.autosave-seconds", 120)));
         if (getConfig().getBoolean("settings.check-updates", true)) versionChecker.checkAtStartup();
-        getLogger().info("CatrixCustomCrafting 1.0.0 已啟用，共載入 " + recipes.size() + " 個配方。");
+        getLogger().info("CatrixCustomCrafting 1.0.1 已啟用，共載入 " + recipes.size() + " 個配方。");
     }
 
     @Override public void onDisable() {
@@ -71,7 +71,17 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         File target = new File(getDataFolder(), name);
         if (!target.exists()) saveResource(name, false);
         YamlConfiguration defaults = YamlConfiguration.loadConfiguration(new InputStreamReader(Objects.requireNonNull(getResource(name)), java.nio.charset.StandardCharsets.UTF_8));
-        YamlConfiguration current = YamlConfiguration.loadConfiguration(target);
+        YamlConfiguration current;
+        try {
+            current = YamlConfiguration.loadConfiguration(target);
+            current.load(target);
+        } catch (Exception malformedYaml) {
+            File backup = new File(getDataFolder(), name + ".broken-" + System.currentTimeMillis());
+            try { java.nio.file.Files.copy(target.toPath(), backup.toPath()); }
+            catch (IOException backupFailure) { getLogger().severe("YAML 格式錯誤且備份失敗，保留原檔：" + name); return; }
+            getLogger().severe("YAML 格式錯誤，原檔已備份至 " + backup.getName() + "，載入預設值。");
+            current = new YamlConfiguration();
+        }
         mergeSection(defaults, current, "");
         try { current.save(target); } catch (IOException e) { getLogger().severe("無法寫入 " + name + ": " + e.getMessage()); }
     }
@@ -96,6 +106,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         recipes.putAll(recipeStore.load());
         recipes.values().forEach(workbench::registerWorkbenchRecipe);
     }
+    RecipeData recipeForKey(NamespacedKey key) { try { return recipes.get(UUID.fromString(key.getKey().substring("custom_".length()).replaceFirst("(.{8})(.{4})(.{4})(.{4})(.{12})", "$1-$2-$3-$4-$5"))); } catch (RuntimeException e) { return null; } }
 
     private void flushIfDirty() {
         if (recipeStore != null) recipeStore.flush(io);

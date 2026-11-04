@@ -1,10 +1,10 @@
 # CatrixCustomCrafting
 
-自訂物品合成框架，適用於 Paper 1.21.11，使用 Java 21 與 Maven。初始版本為 `1.0.0`，作者識別為 `me.cat6666`。
+自訂物品合成框架，適用於 Paper 1.21.11，使用 Java 21 與 Maven。初始版本為 `1.0.0`，目前版本為 `1.0.1`，作者識別為 `me.cat6666`。
 
 ## 建置與安裝
 
-在本專案根目錄執行 `mvn package`，成品會輸出至 `target/CatrixCustomCrafting-1.0.0.jar`。將 JAR 放入伺服器 `plugins` 資料夾並重新啟動。首次啟動會建立 `plugins/CatrixCustomCrafting/config.yml`、`messages.yml` 與 `custom` 資料夾。
+在本專案根目錄執行 `mvn package`，成品會輸出至 `target/CatrixCustomCrafting-1.0.1.jar`。將 JAR 放入伺服器 `plugins` 資料夾並重新啟動。首次啟動會建立 `plugins/CatrixCustomCrafting/config.yml`、`messages.yml` 與 `custom` 資料夾。
 
 ## 建立與使用配方
 
@@ -14,9 +14,10 @@
 - `/ccraft list`：列出配方 UUID。
 - `/ccraft open <UUID>`：開啟配方介面，左鍵點擊輸出物品即可嘗試合成。
 - `/ccraft reload`：補齊設定預設值並重新載入設定、訊息與配方。
+- `/ccraft version`：檢查 GitHub Releases，結果快取 10 分鐘。
 - `/ccraftversion`（別名 `/ccversion`）：非同步檢查 GitHub Releases。結果快取 10 分鐘，不會定時輪詢。
 
-GUI 合成會比對物品種類與完整物品資料（名稱、附魔等），材料可分散於背包不同欄位。工作台合成會比對 3×3 格子中的形狀，允許配方在格子內平移與左右鏡像，並比對物品資料；兩種方式都依配方設定扣除材料。工作台支援左鍵或右鍵逐次合成，背包空間不足時不會扣除材料。
+GUI 合成會比對物品種類與完整物品資料（名稱、附魔等），材料可分散於背包不同欄位。配方可選完全相同的位置，或允許配方形狀平移及左右鏡像；兩種模式都要求材料的物品資料相同。工作台支援左鍵或右鍵逐次合成，背包空間不足時不會扣除材料。
 
 配方存放於 `plugins/CatrixCustomCrafting/custom/<UUID>.yml`。檔案使用 YAML，材料索引 0–8 對應編輯介面左上至右下，輸出存於 `result`。
 

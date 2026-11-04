@@ -1,5 +1,5 @@
 name: CatrixCustomCrafting
-version: 1.0.0
+version: 1.0.1
 main: me.cat6666.catrixcustomcrafting.CatrixCustomCrafting
 api-version: '1.21.11'
 author: me.cat6666
@@ -7,7 +7,7 @@ description: 自訂合成配方框架
 commands:
   ccraft:
     description: 自訂合成管理與配方介面
-    usage: /ccraft [create|edit|list|open|reload]
+    usage: /ccraft [create|edit|list|open|reload|version]
     aliases: [catrixcraft]
   ccraftversion:
     description: 檢查 CatrixCustomCrafting 更新
