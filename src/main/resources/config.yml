@@ -1,6 +1,6 @@
 settings:
   check-updates: true
-  github-repository: "cat6666/CatrixCustomCrafting"
+  github-repository: "The-SMP/CatrixCustomCrafting"
   autosave-seconds: 120
 permissions:
   admin: catrixcustomcrafting.admin

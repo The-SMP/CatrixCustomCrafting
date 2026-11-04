@@ -16,7 +16,7 @@
 - `/ccraft reload`：補齊設定預設值並重新載入設定、訊息與配方。
 - `/ccversion`（另註冊 `/version`）：非同步檢查 GitHub Releases。結果快取 10 分鐘，不會定時輪詢。
 
-GUI 合成會比對物品種類與完整物品資料（名稱、附魔等），材料可分散於背包不同欄位。工作台合成則會比對 3×3 格子的精確位置與物品資料；兩種方式都依配方設定扣除材料。工作台支援左鍵或右鍵逐次合成，背包空間不足時不會扣除材料。
+GUI 合成會比對物品種類與完整物品資料（名稱、附魔等），材料可分散於背包不同欄位。工作台合成會比對 3×3 格子中的形狀，允許配方在格子內平移與左右鏡像，並比對物品資料；兩種方式都依配方設定扣除材料。工作台支援左鍵或右鍵逐次合成，背包空間不足時不會扣除材料。
 
 配方存放於 `plugins/CatrixCustomCrafting/custom/<UUID>.yml`。檔案使用 YAML，材料索引 0–8 對應編輯介面左上至右下，輸出存於 `result`。
 
@@ -30,7 +30,7 @@ GUI 合成會比對物品種類與完整物品資料（名稱、附魔等），�
 | `catrixcustomcrafting.reload` | OP | 重載設定 |
 | `catrixcustomcrafting.version` | OP | 檢查更新及登入提醒 |
 
-所有指令和權限皆在 `plugin.yml` 註冊，權限名稱也可在 `config.yml` 調整。GitHub 儲存庫可透過 `settings.github-repository` 設定為 `owner/repository`。Release 標籤接受 `v` 前綴，例如 `v1.2.0`；高於目前插件版本時回報新版本，低於目前版本時回報開發版。具有更新權限的管理員登入 3 秒後會收到有新版提醒。
+所有指令在 `plugin.yml` 註冊；權限名稱可在 `config.yml` 調整。GitHub 儲存庫可透過 `settings.github-repository` 設定為 `owner/repository`。Release 標籤接受 `v` 前綴，例如 `v1.2.0`；高於目前插件版本時回報新版本，低於目前版本時回報開發版。具有更新權限的管理員登入 3 秒後會收到有新版提醒。
 
 ## 設定與訊息
 

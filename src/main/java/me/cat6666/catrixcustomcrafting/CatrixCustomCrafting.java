@@ -34,6 +34,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
     private BukkitTask saveTask;
     private volatile UpdateState updateState = UpdateState.unknown();
     private volatile long checkedAt;
+    private volatile boolean updateCheckInFlight;
     private volatile boolean dirty;
     private ExecutorService io;
     private String latestVersion;
@@ -43,7 +44,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         pluginVersion = getDescription().getVersion();
         io = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "CatrixCraft-IO"); t.setDaemon(true); return t; });
         guiKey = new NamespacedKey(this, "gui");
-        mergeResource("config.yml"); mergeResource("messages.yml"); reloadConfig(); loadMessages();
+        mergeResource("config.yml"); mergeResource("messages.yml"); reloadConfig(); migrateRepositorySetting(); loadMessages();
         getDataFolder().mkdirs(); new File(getDataFolder(), "custom").mkdirs();
         loadRecipes();
         CraftCommand craftCommand = new CraftCommand();
@@ -82,6 +83,13 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
             String full = path.isEmpty() ? key : path + "." + key;
             if (source.isConfigurationSection(key)) mergeSection(source.getConfigurationSection(key), target, full);
             else if (!target.contains(full)) target.set(full, source.get(full));
+        }
+    }
+    private void migrateRepositorySetting() {
+        String repository = getConfig().getString("settings.github-repository", "The-SMP/CatrixCustomCrafting");
+        if ("cat6666/CatrixCustomCrafting".equalsIgnoreCase(repository) || "me-cat6666/CatrixCustomCrafting".equalsIgnoreCase(repository)) {
+            getConfig().set("settings.github-repository", "The-SMP/CatrixCustomCrafting");
+            saveConfig();
         }
     }
     private void loadMessages() { messageCache.clear(); YamlConfiguration y=YamlConfiguration.loadConfiguration(new File(getDataFolder(),"messages.yml")); for(String key:y.getKeys(true)) if(!y.isConfigurationSection(key)) messageCache.put(key,y.getString(key,"")); }
@@ -274,7 +282,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         List<ItemStack> needed=new ArrayList<>();
         for(ItemStack ingredient:recipe.ingredients) if(ingredient!=null){int match=needed.stream().filter(i->i.isSimilar(ingredient)).findFirst().map(needed::indexOf).orElse(-1);if(match<0)needed.add(ingredient.clone());else needed.get(match).setAmount(needed.get(match).getAmount()+ingredient.getAmount());}
         for(ItemStack required:needed){int available=0;for(ItemStack item:player.getInventory().getStorageContents())if(item!=null&&item.isSimilar(required))available+=item.getAmount();if(available<required.getAmount()){tell(player,"ingredients-missing");return;}}
-        for(ItemStack required:needed){int remain=required.getAmount();for(int i=0;i<player.getInventory().getStorageContents().length&&remain>0;i++){ItemStack item=player.getInventory().getItem(i);if(item!=null&&item.isSimilar(required)){int take=Math.min(remain,item.getAmount());item.setAmount(item.getAmount()-take);remain-=take;if(item.getAmount()==0)player.getInventory().setItem(i,null);}}}
+        for(ItemStack required:needed){int remain=required.getAmount();for(int i=0;i<36&&remain>0;i++){ItemStack item=player.getInventory().getItem(i);if(item!=null&&item.isSimilar(required)){int take=Math.min(remain,item.getAmount());item.setAmount(item.getAmount()-take);remain-=take;if(item.getAmount()==0)player.getInventory().setItem(i,null);}}}
         HashMap<Integer,ItemStack> overflow=player.getInventory().addItem(recipe.result.clone());for(ItemStack item:overflow.values())player.getWorld().dropItemNaturally(player.getLocation(),item);tell(player,"crafted");
     }
 
@@ -292,6 +300,7 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         RecipeData recipe=findWorkbenchRecipe(matrix);if(recipe==null&&!isPluginWorkbenchRecipe(event.getRecipe()))return;
         event.setCancelled(true);
         if(recipe==null)return;
+        if(!player.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(player,"no-permission");return;}
         if(event.isShiftClick()||(event.getClick()!=ClickType.LEFT&&event.getClick()!=ClickType.RIGHT))return;
         if(!hasInventoryRoom(player,recipe.result)){tell(player,"inventory-full");return;}
         for(int i=0;i<9;i++){
@@ -336,11 +345,23 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
     private final class CraftCommand implements TabExecutor {
         public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
             if(args.length==0){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(p,"no-permission");return true;}openMenu(p,0);return true;} String sub=args[0].toLowerCase(Locale.ROOT);
-            if(sub.equals("reload")){if(!sender.hasPermission(getConfig().getString("permissions.reload","catrixcustomcrafting.reload"))){tell(sender,"no-permission");return true;}mergeResource("config.yml");mergeResource("messages.yml");reloadConfig();loadMessages();loadRecipes();tell(sender,"reload");return true;}
+            if(sub.equals("reload")){
+                if(!sender.hasPermission(getConfig().getString("permissions.reload","catrixcustomcrafting.reload"))){tell(sender,"no-permission");return true;}
+                flushIfDirty();
+                io.execute(()->Bukkit.getScheduler().runTask(CatrixCustomCrafting.this,()->{
+                    if(dirty){tell(sender,"reload-save-failed");return;}
+                    mergeResource("config.yml");mergeResource("messages.yml");reloadConfig();migrateRepositorySetting();loadMessages();loadRecipes();
+                    if(saveTask!=null)saveTask.cancel();
+                    long interval=20L*Math.max(30,getConfig().getInt("settings.autosave-seconds",120));
+                    saveTask=Bukkit.getScheduler().runTaskTimer(CatrixCustomCrafting.this,CatrixCustomCrafting.this::flushIfDirty,interval,interval);
+                    tell(sender,"reload");
+                }));
+                tell(sender,"reload-pending");return true;
+            }
             if(sub.equals("create")){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.create","catrixcustomcrafting.create"))){tell(p,"no-permission");return true;}openEditor(p);tell(p,"create-start");return true;}
-            if(sub.equals("edit")){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.create","catrixcustomcrafting.create"))){tell(p,"no-permission");return true;}if(args.length<2){tell(p,"usage");return true;}try{RecipeData recipe=recipes.get(UUID.fromString(args[1]));if(recipe==null){tell(p,"recipe-missing");return true;}openEditor(p,recipe);}catch(IllegalArgumentException e){tell(p,"recipe-missing");}return true;}
-            if(sub.equals("list")){if(!sender.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(sender,"no-permission");return true;}if(recipes.isEmpty()){tell(sender,"recipe-empty");return true;}tell(sender,"recipe-list");sender.sendMessage(recipes.keySet().stream().map(UUID::toString).reduce((a,b)->a+", "+b).orElse(""));return true;}
-            if(sub.equals("open")){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(p,"no-permission");return true;}if(args.length<2){tell(p,"usage");return true;}try{RecipeData recipe=recipes.get(UUID.fromString(args[1]));if(recipe==null){tell(p,"recipe-missing");return true;}openRecipe(p,recipe);}catch(IllegalArgumentException e){tell(p,"recipe-missing");}return true;}
+            if(sub.equals("edit")){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.create","catrixcustomcrafting.create"))){tell(p,"no-permission");return true;}if(args.length<2){tell(p,"usage");return true;}try{RecipeData recipe=recipes.get(UUID.fromString(args[1]));if(recipe==null){p.sendMessage(msg("prefix")+msg("recipe-missing",Map.of("id",args[1])));return true;}openEditor(p,recipe);}catch(IllegalArgumentException e){p.sendMessage(msg("prefix")+msg("recipe-missing",Map.of("id",args[1])));}return true;}
+            if(sub.equals("list")){if(!sender.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(sender,"no-permission");return true;}if(recipes.isEmpty()){tell(sender,"recipe-empty");return true;}sender.sendMessage(msg("prefix")+msg("recipe-list",Map.of("ids",recipes.keySet().stream().map(UUID::toString).reduce((a,b)->a+", "+b).orElse(""))));return true;}
+            if(sub.equals("open")){if(!(sender instanceof Player p)){tell(sender,"player-only");return true;}if(!p.hasPermission(getConfig().getString("permissions.use","catrixcustomcrafting.use"))){tell(p,"no-permission");return true;}if(args.length<2){tell(p,"usage");return true;}try{RecipeData recipe=recipes.get(UUID.fromString(args[1]));if(recipe==null){p.sendMessage(msg("prefix")+msg("recipe-missing",Map.of("id",args[1])));return true;}openRecipe(p,recipe);}catch(IllegalArgumentException e){p.sendMessage(msg("prefix")+msg("recipe-missing",Map.of("id",args[1])));}return true;}
             tell(sender,"usage");return true;
         }
         public List<String> onTabComplete(CommandSender s,Command c,String a,String[] args){if(args.length==1)return Arrays.stream(new String[]{"create","edit","list","open","reload"}).filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();if(args.length==2&&(args[0].equalsIgnoreCase("open")||args[0].equalsIgnoreCase("edit")))return recipes.keySet().stream().map(UUID::toString).filter(x->x.startsWith(args[1])).toList();return List.of();}
@@ -350,15 +371,19 @@ public final class CatrixCustomCrafting extends JavaPlugin implements Listener {
         public List<String> onTabComplete(CommandSender s,Command c,String a,String[] args){return List.of();}
     }
     private void checkUpdate(boolean manual){
-        checkedAt=System.currentTimeMillis(); String repo=getConfig().getString("settings.github-repository","me-cat6666/CatrixCustomCrafting");
-        io.execute(()->{try{HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();HttpRequest req=HttpRequest.newBuilder(URI.create("https://api.github.com/repos/"+repo+"/releases/latest")).timeout(Duration.ofSeconds(8)).header("Accept","application/vnd.github+json").header("User-Agent","CatrixCustomCrafting").GET().build();HttpResponse<String> response=client.send(req,HttpResponse.BodyHandlers.ofString());if(response.statusCode()!=200)throw new IOException("HTTP "+response.statusCode());String tag=response.body().replaceAll("(?s).*?\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+).*","$1");if(tag.equals(response.body()))throw new IOException("tag not found");latestVersion=tag;updateState=compare(tag,pluginVersion);Bukkit.getScheduler().runTask(this,()->{if(updateState==UpdateState.AVAILABLE)getLogger().info("發現新版本 "+tag+"（目前："+pluginVersion+"）");else if(updateState==UpdateState.DEVELOPMENT)getLogger().info("目前版本比 GitHub 新（開發版）："+pluginVersion);else getLogger().info("目前已是最新版本："+tag);if(manual)Bukkit.getOnlinePlayers().stream().filter(p->p.hasPermission(getConfig().getString("permissions.version","catrixcustomcrafting.version"))).forEach(this::sendVersion);});}catch(Exception e){updateState=UpdateState.FAILED;getLogger().warning("GitHub 版本檢查失敗："+e.getMessage());}});
+        if(updateCheckInFlight)return;
+        String repo=getConfig().getString("settings.github-repository","The-SMP/CatrixCustomCrafting");
+        if(repo==null||!repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")){updateState=UpdateState.FAILED;checkedAt=System.currentTimeMillis();getLogger().warning("GitHub 儲存庫設定格式無效，請使用 owner/repository。");return;}
+        updateCheckInFlight=true;
+        io.execute(()->{try{HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();HttpRequest req=HttpRequest.newBuilder(URI.create("https://api.github.com/repos/"+repo+"/releases/latest")).timeout(Duration.ofSeconds(8)).header("Accept","application/vnd.github+json").header("User-Agent","CatrixCustomCrafting").GET().build();HttpResponse<String> response=client.send(req,HttpResponse.BodyHandlers.ofString());if(response.statusCode()!=200)throw new IOException("HTTP "+response.statusCode());String tag=response.body().replaceAll("(?s).*?\\\"tag_name\\\"\\s*:\\s*\\\"([^\\\"]+).*","$1");if(tag.equals(response.body()))throw new IOException("tag not found");latestVersion=tag;updateState=compare(tag,pluginVersion);checkedAt=System.currentTimeMillis();Bukkit.getScheduler().runTask(this,()->{if(updateState==UpdateState.AVAILABLE)getLogger().info("發現新版本 "+tag+"（目前："+pluginVersion+"）");else if(updateState==UpdateState.DEVELOPMENT)getLogger().info("目前版本比 GitHub 新（開發版）："+pluginVersion);else getLogger().info("目前已是最新版本："+tag);if(manual)Bukkit.getOnlinePlayers().stream().filter(p->p.hasPermission(getConfig().getString("permissions.version","catrixcustomcrafting.version"))).forEach(this::sendVersion);});}catch(Exception e){updateState=UpdateState.FAILED;checkedAt=System.currentTimeMillis();getLogger().warning("GitHub 版本檢查失敗："+e.getMessage());}finally{updateCheckInFlight=false;}});
     }
     private UpdateState compare(String remote,String current){int c=compareVersions(normalize(current),normalize(remote));return c<0?UpdateState.AVAILABLE:c>0?UpdateState.DEVELOPMENT:UpdateState.CURRENT;}
     private String normalize(String version){return version.trim().replaceFirst("(?i)^v","").split("[-+]")[0];}
     private int compareVersions(String a,String b){try{String[] x=a.split("\\."),y=b.split("\\.");for(int i=0;i<Math.max(x.length,y.length);i++){int p=i<x.length?Integer.parseInt(x[i]):0,q=i<y.length?Integer.parseInt(y[i]):0;if(p!=q)return Integer.compare(p,q);}return 0;}catch(NumberFormatException e){return a.compareToIgnoreCase(b);}}
     private void sendVersion(Player p){if(updateState==UpdateState.AVAILABLE)p.sendMessage(msg("prefix")+msg("update-available",Map.of("version",latestVersion,"current",pluginVersion)));else if(updateState==UpdateState.DEVELOPMENT)p.sendMessage(msg("prefix")+msg("update-dev",Map.of("current",pluginVersion)));else if(updateState==UpdateState.CURRENT)p.sendMessage(msg("prefix")+msg("update-current",Map.of("version",latestVersion)));}
     private void sendVersion(CommandSender sender){if(sender instanceof Player player){sendVersion(player);return;}if(updateState==UpdateState.AVAILABLE)sender.sendMessage(msg("update-console-available",Map.of("version",latestVersion,"current",pluginVersion)));else if(updateState==UpdateState.DEVELOPMENT)sender.sendMessage(msg("update-console-dev",Map.of("current",pluginVersion)));else if(updateState==UpdateState.CURRENT)sender.sendMessage(msg("update-console-current",Map.of("version",latestVersion)));}
-    @EventHandler public void onJoin(org.bukkit.event.player.PlayerJoinEvent event){Player player=event.getPlayer();Bukkit.getScheduler().runTaskLater(this,()->{if(player.isOnline()&&player.hasPermission(getConfig().getString("permissions.version","catrixcustomcrafting.version"))&&updateState==UpdateState.AVAILABLE)sendVersion(player);},60L);}
+    @EventHandler public void onJoin(org.bukkit.event.player.PlayerJoinEvent event){UUID playerId=event.getPlayer().getUniqueId();Bukkit.getScheduler().runTaskLater(this,()->remindIfUpdateAvailable(playerId,0),60L);}
+    private void remindIfUpdateAvailable(UUID playerId,int waitedTicks){Player player=Bukkit.getPlayer(playerId);if(player==null||!player.hasPermission(getConfig().getString("permissions.version","catrixcustomcrafting.version")))return;if(updateState==UpdateState.AVAILABLE){sendVersion(player);return;}if(updateState==UpdateState.UNKNOWN&&waitedTicks<600)Bukkit.getScheduler().runTaskLater(this,()->remindIfUpdateAvailable(playerId,waitedTicks+20),20L);}
     private enum UpdateState { UNKNOWN, CURRENT, AVAILABLE, DEVELOPMENT, FAILED; boolean known(){return this!=UNKNOWN&&this!=FAILED;} static UpdateState unknown(){return UNKNOWN;} }
     private record RecipeData(UUID id,ItemStack[] ingredients,ItemStack result){}
     private static final class EditorState{ final UUID recipeId; EditorState(UUID recipeId){this.recipeId=recipeId;} }
